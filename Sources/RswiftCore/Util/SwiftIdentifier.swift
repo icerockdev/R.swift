@@ -19,9 +19,13 @@ private let upperCasedPrefixRegex = try! NSRegularExpression(pattern: "^([A-Z]+)
 struct SwiftIdentifier : CustomStringConvertible {
   let description: String
 
-  init(name: String, lowercaseStartingCharacters: Bool = true) {
+  init(name: String, lowercaseStartingCharacters: Bool = true, allowInternalStructs: Bool = false) {
     // Remove all blacklisted characters from the name and uppercase the character after a blacklisted character
-    var nameComponents = name.components(separatedBy: blacklistedCharacters)
+    var separationChars = blacklistedCharacters
+    if allowInternalStructs {
+      separationChars.remove(charactersIn: ".")
+    }
+    var nameComponents = name.components(separatedBy: separationChars)
     let firstComponent = nameComponents.remove(at: 0)
     let cleanedSwiftName = nameComponents.reduce(firstComponent) { $0 + $1.uppercaseFirstCharacter }
 
@@ -119,8 +123,8 @@ struct SwiftNameGroups<T> {
 }
 
 extension Sequence {
-  func grouped(bySwiftIdentifier identifierSelector: @escaping (Iterator.Element) -> String) -> SwiftNameGroups<Iterator.Element> {
-    var groupedBy = grouped { SwiftIdentifier(name: identifierSelector($0)) }
+  func grouped(bySwiftIdentifier identifierSelector: @escaping (Iterator.Element) -> String, allowSubStructs: Bool = false) -> SwiftNameGroups<Iterator.Element> {
+    var groupedBy = grouped { SwiftIdentifier(name: identifierSelector($0), allowInternalStructs: allowSubStructs) }
     let empty = SwiftIdentifier(name: "")
     let empties = groupedBy[empty]?.map { "'\(identifierSelector($0))'" }.sorted()
     groupedBy[empty] = nil
