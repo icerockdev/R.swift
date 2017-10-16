@@ -11,4 +11,4 @@ one = "一つ";
 two = 2;
 
 "quote" = "%dつの光があります！";
-"japanese only" = "Not translated in other languages, and there is no Base";
+"japanese.only" = "Not translated in other languages, and there is no Base";

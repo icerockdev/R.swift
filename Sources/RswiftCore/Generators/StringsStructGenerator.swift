@@ -52,6 +52,7 @@ struct StringsStructGenerator: ExternalOnlyStructGenerator {
     fileprivate var values: [StringValues] = []
     
     fileprivate func tryAppend(withKey key: String, andValue value: StringValues) -> Bool {
+      print("SwiftIdentifierLocalizableNode. Try append with key: \(key)")
       let components = key.components(separatedBy: ".")
       let firstKey = components.first ?? key
       guard firstKey == currentKey else {
@@ -80,24 +81,31 @@ struct StringsStructGenerator: ExternalOnlyStructGenerator {
     }
     
     fileprivate init?(withKey key: String, fromValue: StringValues?) {
+      let fullKey = fromValue?.key ?? ""
+      print("SwiftIdentifierLocalizableNode(\(fullKey)). Try init with key: \(key).")
       guard key != "" else {
+        print("SwiftIdentifierLocalizableNode(\(fullKey)). Empty key")
         return nil
       }
       
       let components = key.components(separatedBy: ".")
+      self.currentKey = components.first ?? key
+      
       guard components.count > 1 else {
-        return nil
+        print("SwiftIdentifierLocalizableNode(\(fullKey)). 1 component")
+        return
       }
       
-      self.currentKey = components.first ?? key
       guard let nValue = fromValue else {
+        print("SwiftIdentifierLocalizableNode(\(fullKey)). 1 nil value")
         return
       }
       let lastComponents = components.dropFirst()
-      if lastComponents.count == 0 {
-        self.values = [nValue]
+      print("SwiftIdentifierLocalizableNode(\(fullKey)). Last components: \(lastComponents.count)")
+      if lastComponents.count == 1, let lastKey = lastComponents.first {
+        self.values = [StringValues(finalKey: lastKey, key: nValue.key, params: nValue.params, tableName: nValue.tableName, values: nValue.values)]
       }
-      if lastComponents.count > 0 {
+      if lastComponents.count > 1 {
         let newKey = lastComponents.joined(separator: ".")
         subNodes = [nValue].flatMap({ SwiftIdentifierLocalizableNode.init(withKey: newKey, fromValue: $0) })
       }
@@ -244,7 +252,7 @@ struct StringsStructGenerator: ExternalOnlyStructGenerator {
       if !areCorrectFormatSpecifiers { continue }
 
       let vals = keyParams.map { ($0.0, $0.1) }
-      let values = StringValues(key: key, params: params, tableName: filename, values: vals )
+      let values = StringValues(finalKey: key, key: key, params: params, tableName: filename, values: vals )
       results.append(values)
     }
 
@@ -272,7 +280,7 @@ struct StringsStructGenerator: ExternalOnlyStructGenerator {
       comments: values.comments,
       accessModifier: externalAccessLevel,
       isStatic: true,
-      name: SwiftIdentifier(name: values.key),
+      name: SwiftIdentifier(name: values.finalKey),
       typeDefinition: .inferred(Type.StringResource),
       value: "Rswift.StringResource(key: \"\(escapedKey)\", tableName: \"\(values.tableName)\", bundle: R.hostingBundle, locales: [\(locales)], comment: nil)"
     )
@@ -294,7 +302,7 @@ struct StringsStructGenerator: ExternalOnlyStructGenerator {
       comments: values.comments,
       accessModifier: externalAccessLevel,
       isStatic: true,
-      name: SwiftIdentifier(name: values.key),
+      name: SwiftIdentifier(name: values.finalKey),
       generics: nil,
       parameters: [
         Function.Parameter(name: "_", type: Type._Void, defaultValue: "()")
@@ -322,7 +330,7 @@ struct StringsStructGenerator: ExternalOnlyStructGenerator {
       comments: values.comments,
       accessModifier: externalAccessLevel,
       isStatic: true,
-      name: SwiftIdentifier(name: values.key),
+      name: SwiftIdentifier(name: values.finalKey),
       generics: nil,
       parameters: params,
       doesThrow: false,
@@ -347,6 +355,7 @@ extension Locale {
 }
 
 private struct StringValues {
+  var finalKey: String
   let key: String
   let params: [StringParam]
   let tableName: String
