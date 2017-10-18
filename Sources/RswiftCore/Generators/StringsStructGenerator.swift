@@ -23,8 +23,6 @@ struct StringsStructGenerator: ExternalOnlyStructGenerator {
     let groupedLocalized = localized.grouped(bySwiftIdentifier: { $0.0 }, allowSubStructs: true)
 
     groupedLocalized.printWarningsForDuplicatesAndEmpties(source: "strings file", result: "file")
-
-    
     
     let structs = groupedLocalized.uniques.flatMap { arg -> Struct? in
       let (key, value) = arg
@@ -52,16 +50,19 @@ struct StringsStructGenerator: ExternalOnlyStructGenerator {
     fileprivate var values: [StringValues] = []
     
     fileprivate func tryAppend(withKey key: String, andValue value: StringValues) -> Bool {
-      print("SwiftIdentifierLocalizableNode. Try append with key: \(key)")
+      print("StringValuesNode(\(value.key)). Try append with key: \(key)")
       let components = key.components(separatedBy: ".")
       let firstKey = components.first ?? key
       guard firstKey == currentKey else {
+        print("StringValuesNode(\(value.key)). Can't add. Current key is: \(currentKey).")
         return false
       }
       let lastComponents = components.dropFirst()
       
-      if lastComponents.count == 1 {
-        values.append(value)
+      if lastComponents.count == 1, let finalKey = lastComponents.first {
+        let newValue = StringValues(finalKey: finalKey, key: value.key, params: value.params, tableName: value.tableName, values: value.values)
+        values.append(newValue)
+        print("StringValuesNode(\(value.key)). Value added. Current key is: \(currentKey).")
         return true
       }
       let newKey = lastComponents.joined(separator: ".")
@@ -69,37 +70,48 @@ struct StringsStructGenerator: ExternalOnlyStructGenerator {
       for node in subNodes {
         wasAdded = wasAdded || node.tryAppend(withKey: newKey, andValue: value)
         if wasAdded {
+          print("StringValuesNode(\(value.key)). Appended to subnode: \(node.currentKey).")
           break
         }
       }
-      if !wasAdded, let node = StringValuesNode(withKey: newKey, fromValue: value) {
-        subNodes.append(node)
+      if !wasAdded {
+        if let node = StringValuesNode(withKey: newKey, fromValue: value) {
+          subNodes.append(node)
+          print("StringValuesNode(\(value.key)). Not append, created subnode: \(node.currentKey).")
+          return true
+        }
+        print("StringValuesNode(\(value.key)). Not append, can't create subnode: \(newKey).")
+        return false
       }
       return true
     }
     
     fileprivate init?(withKey key: String, fromValue: StringValues?) {
       let fullKey = fromValue?.key ?? ""
-      print("SwiftIdentifierLocalizableNode(\(fullKey)). Try init with key: \(key).")
+      print("StringValuesNode(\(fullKey)). Try init with key: \(key).")
       guard key != "" else {
-        print("SwiftIdentifierLocalizableNode(\(fullKey)). Empty key")
+        print("StringValuesNode(\(fullKey)). Empty key")
         return nil
       }
       
       let components = key.components(separatedBy: ".")
-      self.currentKey = components.first ?? key
+      guard let nKey = components.first else {
+        print("StringValuesNode(\(fullKey)). 0 components")
+        return nil
+      }
+      self.currentKey = nKey
       
       guard components.count > 1 else {
-        print("SwiftIdentifierLocalizableNode(\(fullKey)). 1 component")
+        print("StringValuesNode(\(fullKey)). 1 component, only key obtained")
         return
       }
       
       guard let nValue = fromValue else {
-        print("SwiftIdentifierLocalizableNode(\(fullKey)). 1 nil value")
+        print("StringValuesNode(\(fullKey)). 1 nil value")
         return
       }
       let lastComponents = components.dropFirst()
-      print("SwiftIdentifierLocalizableNode(\(fullKey)). Last components: \(lastComponents.count)")
+      print("StringValuesNode(\(fullKey)). Last components: \(lastComponents.count)")
       if lastComponents.count == 1, let lastKey = lastComponents.first {
         self.values = [StringValues(finalKey: lastKey, key: nValue.key, params: nValue.params, tableName: nValue.tableName, values: nValue.values)]
       }
