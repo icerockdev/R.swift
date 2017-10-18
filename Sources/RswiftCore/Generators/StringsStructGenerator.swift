@@ -45,10 +45,10 @@ struct StringsStructGenerator: ExternalOnlyStructGenerator {
     )
   }
   
-  class SwiftIdentifierLocalizableNode {
+  class StringValuesNode {
     
     var currentKey: String
-    fileprivate var subNodes: [SwiftIdentifierLocalizableNode] = []
+    fileprivate var subNodes: [StringValuesNode] = []
     fileprivate var values: [StringValues] = []
     
     fileprivate func tryAppend(withKey key: String, andValue value: StringValues) -> Bool {
@@ -64,9 +64,7 @@ struct StringsStructGenerator: ExternalOnlyStructGenerator {
         values.append(value)
         return true
       }
-      
       let newKey = lastComponents.joined(separator: ".")
-      
       var wasAdded = false
       for node in subNodes {
         wasAdded = wasAdded || node.tryAppend(withKey: newKey, andValue: value)
@@ -74,7 +72,7 @@ struct StringsStructGenerator: ExternalOnlyStructGenerator {
           break
         }
       }
-      if !wasAdded, let node = SwiftIdentifierLocalizableNode(withKey: newKey, fromValue: value) {
+      if !wasAdded, let node = StringValuesNode(withKey: newKey, fromValue: value) {
         subNodes.append(node)
       }
       return true
@@ -107,12 +105,12 @@ struct StringsStructGenerator: ExternalOnlyStructGenerator {
       }
       if lastComponents.count > 1 {
         let newKey = lastComponents.joined(separator: ".")
-        subNodes = [nValue].flatMap({ SwiftIdentifierLocalizableNode.init(withKey: newKey, fromValue: $0) })
+        subNodes = [nValue].flatMap({ StringValuesNode(withKey: newKey, fromValue: $0) })
       }
     }
   }
   
-  private func generateStruct(fromSwiftNode node: SwiftIdentifierLocalizableNode, prefix: SwiftIdentifier, externalAccessLevel: AccessLevel) -> Struct {
+  private func generateStruct(fromSwiftNode node: StringValuesNode, prefix: SwiftIdentifier, externalAccessLevel: AccessLevel) -> Struct {
     let structName = SwiftIdentifier(name: node.currentKey)
     let fullName = prefix + structName
     return Struct(
@@ -132,26 +130,13 @@ struct StringsStructGenerator: ExternalOnlyStructGenerator {
   private func stringStructFromLocalizableStrings(filename: String, strings: [LocalizableStrings], at externalAccessLevel: AccessLevel, prefix: SwiftIdentifier) -> Struct? {
   
     let params = computeParams(filename: filename, strings: strings)
-    guard let rootNode = SwiftIdentifierLocalizableNode(withKey: filename, fromValue: nil) else {
+    guard let rootNode = StringValuesNode(withKey: filename, fromValue: nil) else {
       return nil
     }
     for param in params {
       rootNode.tryAppend(withKey: filename + "." + param.key, andValue: param)
     }
     return generateStruct(fromSwiftNode: rootNode, prefix: prefix, externalAccessLevel: externalAccessLevel)
-    /*
-    return Struct(
-      availables: [],
-      comments: ["This `\(qualifiedName)` struct is generated, and contains static references to \(params.count) localization keys."],
-      accessModifier: externalAccessLevel,
-      type: Type(module: .host, name: structName),
-      implements: [],
-      typealiasses: [],
-      properties: params.map { stringLet(values: $0, at: externalAccessLevel) },
-      functions: params.map { stringFunction(values: $0, at: externalAccessLevel) },
-      structs: [],
-      classes: []
-    )*/
   }
 
   // Ahem, this code is a bit of a mess. It might need cleaning up... ;-)
