@@ -11,3 +11,4 @@ one = One;
 two = 2;
 
 "quote" = "There are %d lights!";
+"OrderDetails.Errors.CantDeliver" = "We can't deliver the order to the address";

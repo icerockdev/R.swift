@@ -20,10 +20,10 @@ struct StringsStructGenerator: ExternalOnlyStructGenerator {
     let structName: SwiftIdentifier = "string"
     let qualifiedName = prefix + structName
     let localized = localizableStrings.grouped(by: { $0.filename })
-    let groupedLocalized = localized.grouped(bySwiftIdentifier: { $0.0 })
+    let groupedLocalized = localized.grouped(bySwiftIdentifier: { $0.0 }, allowSubStructs: true)
 
     groupedLocalized.printWarningsForDuplicatesAndEmpties(source: "strings file", result: "file")
-
+    
     let structs = groupedLocalized.uniques.flatMap { arg -> Struct? in
       let (key, value) = arg
       return stringStructFromLocalizableStrings(filename: key, strings: value, at: externalAccessLevel, prefix: qualifiedName)
@@ -42,26 +42,113 @@ struct StringsStructGenerator: ExternalOnlyStructGenerator {
       classes: []
     )
   }
-
-  private func stringStructFromLocalizableStrings(filename: String, strings: [LocalizableStrings], at externalAccessLevel: AccessLevel, prefix: SwiftIdentifier) -> Struct? {
-
-    let structName = SwiftIdentifier(name: filename)
-    let qualifiedName = prefix + structName
-
-    let params = computeParams(filename: filename, strings: strings)
-
+  
+  class StringValuesNode {
+    
+    var currentKey: String
+    fileprivate var subNodes: [StringValuesNode] = []
+    fileprivate var values: [StringValues] = []
+    
+    fileprivate func tryAppend(withKey key: String, andValue value: StringValues) -> Bool {
+      print("StringValuesNode(\(value.key)). Try append with key: \(key)")
+      let components = key.components(separatedBy: ".")
+      let firstKey = components.first ?? key
+      guard firstKey == currentKey else {
+        print("StringValuesNode(\(value.key)). Can't add. Current key is: \(currentKey).")
+        return false
+      }
+      let lastComponents = components.dropFirst()
+      
+      if lastComponents.count == 1, let finalKey = lastComponents.first {
+        let newValue = StringValues(finalKey: finalKey, key: value.key, params: value.params, tableName: value.tableName, values: value.values)
+        values.append(newValue)
+        print("StringValuesNode(\(value.key)). Value added. Current key is: \(currentKey).")
+        return true
+      }
+      let newKey = lastComponents.joined(separator: ".")
+      var wasAdded = false
+      for node in subNodes {
+        wasAdded = wasAdded || node.tryAppend(withKey: newKey, andValue: value)
+        if wasAdded {
+          print("StringValuesNode(\(value.key)). Appended to subnode: \(node.currentKey).")
+          break
+        }
+      }
+      if !wasAdded {
+        if let node = StringValuesNode(withKey: newKey, fromValue: value) {
+          subNodes.append(node)
+          print("StringValuesNode(\(value.key)). Not append, created subnode: \(node.currentKey).")
+          return true
+        }
+        print("StringValuesNode(\(value.key)). Not append, can't create subnode: \(newKey).")
+        return false
+      }
+      return true
+    }
+    
+    fileprivate init?(withKey key: String, fromValue: StringValues?) {
+      let fullKey = fromValue?.key ?? ""
+      print("StringValuesNode(\(fullKey)). Try init with key: \(key).")
+      guard key != "" else {
+        print("StringValuesNode(\(fullKey)). Empty key")
+        return nil
+      }
+      
+      let components = key.components(separatedBy: ".")
+      guard let nKey = components.first else {
+        print("StringValuesNode(\(fullKey)). 0 components")
+        return nil
+      }
+      self.currentKey = nKey
+      
+      guard components.count > 1 else {
+        print("StringValuesNode(\(fullKey)). 1 component, only key obtained")
+        return
+      }
+      
+      guard let nValue = fromValue else {
+        print("StringValuesNode(\(fullKey)). 1 nil value")
+        return
+      }
+      let lastComponents = components.dropFirst()
+      print("StringValuesNode(\(fullKey)). Last components: \(lastComponents.count)")
+      if lastComponents.count == 1, let lastKey = lastComponents.first {
+        self.values = [StringValues(finalKey: lastKey, key: nValue.key, params: nValue.params, tableName: nValue.tableName, values: nValue.values)]
+      }
+      if lastComponents.count > 1 {
+        let newKey = lastComponents.joined(separator: ".")
+        subNodes = [nValue].flatMap({ StringValuesNode(withKey: newKey, fromValue: $0) })
+      }
+    }
+  }
+  
+  private func generateStruct(fromSwiftNode node: StringValuesNode, prefix: SwiftIdentifier, externalAccessLevel: AccessLevel) -> Struct {
+    let structName = SwiftIdentifier(name: node.currentKey)
+    let fullName = prefix + structName
     return Struct(
       availables: [],
-      comments: ["This `\(qualifiedName)` struct is generated, and contains static references to \(params.count) localization keys."],
+      comments: ["This `\(fullName)` struct is generated, and contains static references to \(node.values.count) localization keys."],
       accessModifier: externalAccessLevel,
       type: Type(module: .host, name: structName),
       implements: [],
       typealiasses: [],
-      properties: params.map { stringLet(values: $0, at: externalAccessLevel) },
-      functions: params.map { stringFunction(values: $0, at: externalAccessLevel) },
-      structs: [],
+      properties: node.values.map { stringLet(values: $0, at: externalAccessLevel) },
+      functions: node.values.map { stringFunction(values: $0, at: externalAccessLevel) },
+      structs: node.subNodes.map{ generateStruct(fromSwiftNode: $0, prefix: fullName, externalAccessLevel: externalAccessLevel) },
       classes: []
     )
+  }
+  
+  private func stringStructFromLocalizableStrings(filename: String, strings: [LocalizableStrings], at externalAccessLevel: AccessLevel, prefix: SwiftIdentifier) -> Struct? {
+  
+    let params = computeParams(filename: filename, strings: strings)
+    guard let rootNode = StringValuesNode(withKey: filename, fromValue: nil) else {
+      return nil
+    }
+    for param in params {
+      rootNode.tryAppend(withKey: filename + "." + param.key, andValue: param)
+    }
+    return generateStruct(fromSwiftNode: rootNode, prefix: prefix, externalAccessLevel: externalAccessLevel)
   }
 
   // Ahem, this code is a bit of a mess. It might need cleaning up... ;-)
@@ -162,7 +249,7 @@ struct StringsStructGenerator: ExternalOnlyStructGenerator {
       if !areCorrectFormatSpecifiers { continue }
 
       let vals = keyParams.map { ($0.0, $0.1) }
-      let values = StringValues(key: key, params: params, tableName: filename, values: vals )
+      let values = StringValues(finalKey: key, key: key, params: params, tableName: filename, values: vals )
       results.append(values)
     }
 
@@ -190,7 +277,7 @@ struct StringsStructGenerator: ExternalOnlyStructGenerator {
       comments: values.comments,
       accessModifier: externalAccessLevel,
       isStatic: true,
-      name: SwiftIdentifier(name: values.key),
+      name: SwiftIdentifier(name: values.finalKey),
       typeDefinition: .inferred(Type.StringResource),
       value: "Rswift.StringResource(key: \"\(escapedKey)\", tableName: \"\(values.tableName)\", bundle: R.hostingBundle, locales: [\(locales)], comment: nil)"
     )
@@ -212,7 +299,7 @@ struct StringsStructGenerator: ExternalOnlyStructGenerator {
       comments: values.comments,
       accessModifier: externalAccessLevel,
       isStatic: true,
-      name: SwiftIdentifier(name: values.key),
+      name: SwiftIdentifier(name: values.finalKey),
       generics: nil,
       parameters: [
         Function.Parameter(name: "_", type: Type._Void, defaultValue: "()")
@@ -240,7 +327,7 @@ struct StringsStructGenerator: ExternalOnlyStructGenerator {
       comments: values.comments,
       accessModifier: externalAccessLevel,
       isStatic: true,
-      name: SwiftIdentifier(name: values.key),
+      name: SwiftIdentifier(name: values.finalKey),
       generics: nil,
       parameters: params,
       doesThrow: false,
@@ -265,6 +352,7 @@ extension Locale {
 }
 
 private struct StringValues {
+  var finalKey: String
   let key: String
   let params: [StringParam]
   let tableName: String
