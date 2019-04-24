@@ -17,7 +17,6 @@ enum ResourceParsingError: Error {
 struct Resources {
   let assetFolders: [AssetFolder]
   let images: [Image]
-  let colors: [ColorPalette]
   let fonts: [Font]
   let nibs: [Nib]
   let storyboards: [Storyboard]
@@ -27,16 +26,46 @@ struct Resources {
   let reusables: [Reusable]
 
   init(resourceURLs: [URL], fileManager: FileManager) {
-    assetFolders = resourceURLs.flatMap { url in tryResourceParsing { try AssetFolder(url: url, fileManager: fileManager) } }
-    images = resourceURLs.flatMap { url in tryResourceParsing { try Image(url: url) } }
-    colors = resourceURLs.flatMap { url in tryResourceParsing { try ColorPalette(url: url) } }
-    fonts = resourceURLs.flatMap { url in tryResourceParsing { try Font(url: url) } }
-    nibs = resourceURLs.flatMap { url in tryResourceParsing { try Nib(url: url) } }
-    storyboards = resourceURLs.flatMap { url in tryResourceParsing { try Storyboard(url: url) } }
-    resourceFiles = resourceURLs.flatMap { url in tryResourceParsing { try ResourceFile(url: url) } }
+    
+    var assetFolders = [AssetFolder]()
+    var images = [Image]()
+    var fonts = [Font]()
+    var nibs = [Nib]()
+    var storyboards = [Storyboard]()
+    var resourceFiles = [ResourceFile]()
+    var localizableStrings = [LocalizableStrings]()
+    
+    resourceURLs.forEach { url in
+      if let nib = tryResourceParsing({ try Nib(url: url) }) {
+        nibs.append(nib)
+      } else if let image = tryResourceParsing({ try Image(url: url) }) {
+        images.append(image)
+        if let resourceFile = tryResourceParsing({ try ResourceFile(url: url) }) {
+            resourceFiles.append(resourceFile)
+        }
+      } else if let asset = tryResourceParsing({ try AssetFolder(url: url, fileManager: fileManager) }) {
+        assetFolders.append(asset)
+      } else if let font = tryResourceParsing({ try Font(url: url) }) {
+        fonts.append(font)
+      } else if let storyboard = tryResourceParsing({ try Storyboard(url: url) }) {
+        storyboards.append(storyboard)
+      } else if let resourceFile = tryResourceParsing({ try ResourceFile(url: url) }) {
+        resourceFiles.append(resourceFile)
+      } else if let localizableString = tryResourceParsing({ try LocalizableStrings(url: url) }) {
+        localizableStrings.append(localizableString)
+      }
+    }
+    
+    self.assetFolders = assetFolders
+    self.images = images
+    self.fonts = fonts
+    self.nibs = nibs
+    self.storyboards = storyboards
+    self.resourceFiles = resourceFiles
+    self.localizableStrings = localizableStrings
+    
     reusables = (nibs.map { $0 as ReusableContainer } + storyboards.map { $0 as ReusableContainer })
       .flatMap { $0.reusables }
-    localizableStrings = resourceURLs.flatMap { url in tryResourceParsing { try LocalizableStrings(url: url) } }
   }
 }
 

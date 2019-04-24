@@ -1,11 +1,11 @@
-// swift-tools-version:4.0
+// swift-tools-version:4.2
 import PackageDescription
 
 let package = Package(
   name: "rswift",
   dependencies: [
-    .package(url: "https://github.com/kylef/Commander.git", .upToNextMinor(from: "0.6.0")),
-    .package(url: "https://github.com/tomlokhorst/XcodeEdit", .branch("release/2.0"))
+    .package(url: "https://github.com/kylef/Commander.git", from: "0.8.0"),
+    .package(url: "https://github.com/tomlokhorst/XcodeEdit", from: "2.5.0")
   ],
   targets: [
     .target(
@@ -17,6 +17,5 @@ let package = Package(
       dependencies: ["Commander", "XcodeEdit"]
     ),
     .testTarget(name: "RswiftCoreTests", dependencies: ["RswiftCore"]),
-  ],
-  swiftLanguageVersions: [4]
+  ]
 )

@@ -23,8 +23,8 @@ struct StringsStructGenerator: ExternalOnlyStructGenerator {
     let groupedLocalized = localized.grouped(bySwiftIdentifier: { $0.0 }, allowSubStructs: true)
 
     groupedLocalized.printWarningsForDuplicatesAndEmpties(source: "strings file", result: "file")
-    
-    let structs = groupedLocalized.uniques.flatMap { arg -> Struct? in
+
+    let structs = groupedLocalized.uniques.compactMap { arg -> Struct? in
       let (key, value) = arg
       return stringStructFromLocalizableStrings(filename: key, strings: value, at: externalAccessLevel, prefix: qualifiedName)
     }
@@ -257,7 +257,7 @@ struct StringsStructGenerator: ExternalOnlyStructGenerator {
       let fewParams = allParams.filter { $0.0 == badKey }.map { $0.1 }
 
       if let params = fewParams.first {
-        let locales = params.flatMap { $0.0.localeDescription }.joined(separator: ", ")
+        let locales = params.compactMap { $0.0.localeDescription }.joined(separator: ", ")
         warn("Skipping string for key \(badKey) (\(filename)), format specifiers don't match for all locales: \(locales)")
       }
     }
@@ -269,7 +269,7 @@ struct StringsStructGenerator: ExternalOnlyStructGenerator {
     let escapedKey = values.key.escapedStringLiteral
     let locales = values.values
       .map { $0.0 }
-      .flatMap { $0.localeDescription }
+      .compactMap { $0.localeDescription }
       .map { "\"\($0)\"" }
       .joined(separator: ", ")
 
@@ -406,7 +406,7 @@ private struct StringValues {
         results.append("")
       }
 
-      let locales = values.flatMap { $0.0.localeDescription }
+      let locales = values.compactMap { $0.0.localeDescription }
       results.append("Locales: \(locales.joined(separator: ", "))")
     }
 
